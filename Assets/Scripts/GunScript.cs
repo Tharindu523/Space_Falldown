@@ -4,28 +4,30 @@ using TMPro; // REQUIRED for using TextMeshPro UI components
 
 /// <summary>
 /// Handles all core combat logic: shooting (raycasting), damage application, 
-/// fire rate control, ammunition tracking, reloading, and all associated visual/audio feedback.
+/// fire rate control, ammunition tracking, reloading, and all associated visual/audio feedback 
+/// including triggering weapon animations.
 /// </summary>
 public class GunScript : MonoBehaviour
 {
     [Header("Weapon Stats")]
     public float damage = 10f;
     public float range = 100f;
-    public float fireRate = 0.5f; // Shots per second (0.5 means 2 shots per second)
+    public float fireRate = 0.5f;
 
     [Header("Ammunition")]
-    public int magSize = 30;         // Max bullets the magazine holds
-    public float reloadTime = 2.0f;  // Time it takes to reload
-    private int currentAmmo;         // Current bullets remaining in the mag
+    public int magSize = 30;
+    public float reloadTime = 2.0f;
+    private int currentAmmo;
     private bool isReloading = false;
 
     [Header("Component References")]
     // Drag your Player Camera here (the one this script is attached to)
     public Camera fpsCam;
     private AudioSource audioSource;
+    // NEW: Drag the Animator component attached to your WeaponHolder here
+    public Animator gunAnimator;
 
     [Header("HUD")]
-    // Drag your TextMeshPro UI object here to display ammo count
     public TextMeshProUGUI ammoText;
 
     [Header("Visual Feedback Prefabs")]
@@ -65,12 +67,16 @@ public class GunScript : MonoBehaviour
             Debug.LogError("GunScript requires an AudioSource component on the same GameObject (Camera).");
         }
 
-        UpdateAmmoUI(); // Set initial ammo display
+        if (gunAnimator == null)
+        {
+            Debug.LogError("Gun Animator reference is missing. Drag the WeaponHolder's Animator here.");
+        }
+
+        UpdateAmmoUI();
     }
 
     void Update()
     {
-        // Don't do anything if we are currently reloading
         if (isReloading)
             return;
 
@@ -90,7 +96,6 @@ public class GunScript : MonoBehaviour
         }
 
         // 2. Check for Manual Reload Input (Default: R key)
-        // Only reload if we have less than a full magazine
         if (Input.GetKeyDown(KeyCode.R) && currentAmmo < magSize)
         {
             StartCoroutine(Reload());
@@ -98,13 +103,19 @@ public class GunScript : MonoBehaviour
     }
 
     /// <summary>
-    /// Executes the raycast, damage, and effects logic.
+    /// Executes the raycast, damage, effects, and animation logic.
     /// </summary>
     void Shoot()
     {
         // Consume one bullet
         currentAmmo--;
         UpdateAmmoUI();
+
+        // Trigger the Fire animation (uses the 'Fire' trigger in the Animator)
+        if (gunAnimator != null)
+        {
+            gunAnimator.SetTrigger("Fire");
+        }
 
         // Play the main firing sound
         if (audioSource != null && fireSound != null)
@@ -115,9 +126,8 @@ public class GunScript : MonoBehaviour
         // Trigger Muzzle Flash (Visual Feedback)
         if (muzzleFlashPrefab != null && muzzlePoint != null)
         {
-            // Instantiate the effect at the muzzle position
-            GameObject flash = Instantiate(muzzleFlashPrefab, muzzlePoint.position, muzzlePoint.rotation);
-            // Destroy after 0.5 seconds
+            // NEW: Added muzzlePoint as the parent to ensure flash follows the moving gun
+            GameObject flash = Instantiate(muzzleFlashPrefab, muzzlePoint.position, muzzlePoint.rotation, muzzlePoint);
             StartCoroutine(DestroyMuzzleFlash(flash, 0.5f));
         }
 
@@ -133,7 +143,6 @@ public class GunScript : MonoBehaviour
             // --- DAMAGE & HIT SOUND LOGIC ---
             if (targetHealth != null)
             {
-                // HIT ENEMY: Apply Damage and Play Enemy Hit Sound
                 targetHealth.TakeDamage(damage);
                 if (audioSource != null && hitSoundEnemy != null)
                 {
@@ -142,7 +151,6 @@ public class GunScript : MonoBehaviour
             }
             else
             {
-                // HIT ENVIRONMENT: Play Environment Hit Sound
                 if (audioSource != null && hitSoundEnvironment != null)
                 {
                     audioSource.PlayOneShot(hitSoundEnvironment);
@@ -152,18 +160,10 @@ public class GunScript : MonoBehaviour
             // --- BULLET DECAL LOGIC ---
             if (bulletDecalPrefab != null)
             {
-                // Align decal rotation with the surface normal
                 Quaternion rotation = Quaternion.LookRotation(hit.normal);
-                // Add random rotation on Z to prevent uniform bullet holes
                 rotation *= Quaternion.Euler(0, 0, Random.Range(0, 360));
-
-                // Instantiate decal slightly offset to prevent Z-fighting
                 GameObject decal = Instantiate(bulletDecalPrefab, hit.point + hit.normal * 0.01f, rotation);
-
-                // Attach to the object hit
                 decal.transform.SetParent(hit.transform);
-
-                // Destroy after 10 seconds
                 Destroy(decal, 10f);
             }
         }
@@ -179,6 +179,12 @@ public class GunScript : MonoBehaviour
 
         isReloading = true;
         Debug.Log("Reloading...");
+
+        // Trigger the Reload animation (uses the 'Reload' trigger in the Animator)
+        if (gunAnimator != null)
+        {
+            gunAnimator.SetTrigger("Reload");
+        }
 
         // Play reload sound
         if (audioSource != null && reloadSound != null)
