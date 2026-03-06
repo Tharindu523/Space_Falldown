@@ -1,52 +1,42 @@
 using UnityEngine;
+using System.Collections;
 
-/// <summary>
-/// A generic health component that can be attached to any object 
-/// (Player, Enemy, Breakable) that needs to take damage and die.
-/// </summary>
 public class Health : MonoBehaviour
 {
-    [Header("Health Settings")]
     public float maxHealth = 100f;
     private float currentHealth;
+    private bool isDead = false;
 
     void Start()
     {
         currentHealth = maxHealth;
     }
 
-    /// <summary>
-    /// Reduces current health by the specified amount.
-    /// </summary>
-    /// <param name="damageAmount">The amount of damage to inflict.</param>
-    public void TakeDamage(float damageAmount)
+    public void TakeDamage(float amount)
     {
-        // Prevent damage if the object is already dead
-        if (currentHealth <= 0) return;
+        if (isDead) return;
 
-        // Apply the damage
-        currentHealth -= damageAmount;
-        Debug.Log(transform.name + " took " + damageAmount + " damage. Remaining Health: " + currentHealth);
-
-        // Check if the object has died
-        if (currentHealth <= 0)
-        {
-            Die();
-        }
+        currentHealth -= amount;
+        if (currentHealth <= 0) Die();
     }
 
-    /// <summary>
-    /// Called when health drops to zero or below.
-    /// </summary>
     void Die()
     {
-        Debug.Log(transform.name + " has died!");
+        isDead = true;
 
-        // --- TODO: Add death logic here ---
-        // For a simple target, we just destroy the object.
-        Destroy(gameObject);
+        // 1. Tell the Animator to play the death animation
+        Animator anim = GetComponent<Animator>();
+        if (anim != null)
+        {
+            anim.SetTrigger("Die");
+        }
 
-        // For the player, you would typically load a game over scene.
-        // For an enemy, you might trigger an animation, drop loot, etc.
+        // 2. Disable AI and Colliders so the "corpse" doesn't block the player
+        if (GetComponent<UnityEngine.AI.NavMeshAgent>()) GetComponent<UnityEngine.AI.NavMeshAgent>().enabled = false;
+        if (GetComponent<AlienAI>()) GetComponent<AlienAI>().enabled = false;
+        if (GetComponent<Collider>()) GetComponent<Collider>().enabled = false;
+
+        // 3. Destroy the object after 3 seconds (letting the animation finish)
+        Destroy(gameObject, 3f);
     }
 }
