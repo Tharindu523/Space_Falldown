@@ -1,57 +1,32 @@
 using UnityEngine;
 
 /// <summary>
-/// Attached to the Keycard object. Now triggered by the PlayerInteractor script.
+/// A keycard with a specific ID.
 /// </summary>
 public class Keycard : MonoBehaviour
 {
-    [Header("Keycard ID")]
-    public string keycardID = "AirlockKey";
-
-    [Header("Audio")]
+    [Header("Key Settings")]
+    public int keyID; // Set this to 1, 2, 3, 4, or 5 in the Inspector
+    public string keyName = "Access Card";
     public AudioClip pickupSound;
-    private AudioSource audioSource;
 
-    private bool isCollected = false;
-
-    void Start()
-    {
-        audioSource = GetComponent<AudioSource>();
-        if (audioSource == null)
-        {
-            audioSource = gameObject.AddComponent<AudioSource>();
-            audioSource.playOnAwake = false;
-        }
-    }
-
-    // This is the method the PlayerInteractor will call
     public void Interact()
     {
-        if (!isCollected)
+        PlayerInteractor player = GameObject.FindGameObjectWithTag("Player").GetComponent<PlayerInteractor>();
+        if (player != null)
         {
-            CollectKeycard();
+            // Add this specific ID to the player's inventory
+            player.AddKey(keyID);
+
+            if (pickupSound != null) AudioSource.PlayClipAtPoint(pickupSound, transform.position);
+
+            // Update Mission UI
+            if (MissionManager.Instance != null)
+            {
+                MissionManager.Instance.UpdateObjective("Keycard " + keyID + " acquired. Find the corresponding door.");
+            }
+
+            Destroy(gameObject);
         }
-    }
-
-    void CollectKeycard()
-    {
-        isCollected = true;
-
-        if (pickupSound != null)
-        {
-            audioSource.PlayOneShot(pickupSound);
-        }
-
-        // Update the static flag so doors know we have a key
-        DoorScript.HasKeycard = true;
-
-        // Visual feedback: Hide immediately
-        GetComponent<Collider>().enabled = false;
-        if (GetComponent<MeshRenderer>() != null) GetComponent<MeshRenderer>().enabled = false;
-
-        Debug.Log("Keycard collected via interaction: " + keycardID);
-
-        // Destroy after sound plays
-        Destroy(gameObject, pickupSound != null ? pickupSound.length : 0.1f);
     }
 }

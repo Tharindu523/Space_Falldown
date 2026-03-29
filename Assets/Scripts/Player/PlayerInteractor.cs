@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using System.Collections.Generic; // Required for Lists
 
 public class PlayerInteractor : MonoBehaviour
 {
@@ -8,59 +9,50 @@ public class PlayerInteractor : MonoBehaviour
     public Camera playerCamera;
 
     [Header("Hand References")]
-    [Tooltip("Drag the GameObject representing empty hands/unarmed state here.")]
     public GameObject emptyHands;
-    [Tooltip("Drag the GameObject representing the armed state (gun in hand) here.")]
     public GameObject gunArmedHands;
 
-    [Header("UI References")]
+    [Header("UI Interaction Prompt")]
     public TextMeshProUGUI interactionText;
-    [Tooltip("Drag the UI group or text object for the Ammo HUD here.")]
-    public GameObject ammoUI;
 
-    [Header("Inventory State")]
+    [Header("Inventory Logic")]
     public bool hasGun = false;
     public bool hasBomb = false;
 
+    // NEW: List of all keys the player has picked up
+    private List<int> heldKeyIDs = new List<int>();
+
     void Start()
     {
-        // Ensure we start in the correct state: empty hands active, weapon and ammo UI hidden.
-        if (!hasGun)
+        if (emptyHands != null) emptyHands.SetActive(true);
+        if (gunArmedHands != null) gunArmedHands.SetActive(false);
+    }
+
+    public void AddKey(int id)
+    {
+        if (!heldKeyIDs.Contains(id))
         {
-            if (emptyHands != null) emptyHands.SetActive(true);
-            if (gunArmedHands != null) gunArmedHands.SetActive(false);
-            if (ammoUI != null) ammoUI.SetActive(false);
+            heldKeyIDs.Add(id);
         }
+    }
+
+    public bool HasKey(int id)
+    {
+        return heldKeyIDs.Contains(id);
+    }
+
+    public void PickUpWeapon()
+    {
+        hasGun = true;
+        if (emptyHands != null) emptyHands.SetActive(false);
+        if (gunArmedHands != null) gunArmedHands.SetActive(true);
+        MissionManager.Instance.SetAmmoHUD(true);
     }
 
     void Update()
     {
         CheckForInteractable();
         if (Input.GetKeyDown(KeyCode.E)) TryInteract();
-    }
-
-    /// <summary>
-    /// Handles the logical switch when a weapon is picked up. 
-    /// Disables unarmed hands, enables armed hands, and shows the Ammo HUD.
-    /// </summary>
-    public void PickUpWeapon()
-    {
-        hasGun = true;
-
-        // SWITCH HANDS: Disable the "empty" hands and enable the weapon model hands
-        if (emptyHands != null) emptyHands.SetActive(false);
-        if (gunArmedHands != null) gunArmedHands.SetActive(true);
-
-        // UI FEEDBACK: Show the ammo count HUD now that the player has a gun
-        if (ammoUI != null) ammoUI.SetActive(true);
-
-        // Update Objective via MissionManager to reflect progress
-        if (MissionManager.Instance != null)
-        {
-            MissionManager.Instance.UpdateObjective("Find a way to clear the path.");
-        }
-
-        Debug.Log("Weapon Armed: Hands switched and Ammo UI enabled.");
     }
 
     void CheckForInteractable()
@@ -70,14 +62,21 @@ public class PlayerInteractor : MonoBehaviour
 
         if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, interactionDistance))
         {
-            // Check for various interactable components and update the on-screen prompt
-            if (hit.transform.GetComponent<WeaponPickup>()) prompt = "[E] Pick up Pulse Rifle";
-            else if (hit.transform.GetComponent<BombItem>()) prompt = "[E] Pick up Fusion Charge";
-            else if (hit.transform.GetComponent<DoorScript>()) prompt = "[E] Open Door";
-            else if (hit.transform.GetComponent<Keycard>()) prompt = "[E] Pick up Keycard";
+            if (hit.transform.GetComponent<WeaponPickup>()) prompt = "[E] Take Pulse Rifle";
+            else if (hit.transform.GetComponent<BombItem>()) prompt = "[E] Take Fusion Charge";
+            else if (hit.transform.GetComponent<Keycard>())
+            {
+                Keycard k = hit.transform.GetComponent<Keycard>();
+                prompt = "[E] Pick up Keycard " + k.keyID;
+            }
+            else if (hit.transform.GetComponent<DoorScript>())
+            {
+                DoorScript d = hit.transform.GetComponent<DoorScript>();
+                prompt = "[E] Use Console";
+            }
             else if (hit.transform.GetComponent<DestructibleObstacle>())
             {
-                prompt = hasBomb ? "[E] Plant Fusion Charge" : "Requires Explosive";
+                prompt = hasBomb ? "[E] Plant Explosive" : "Requires Explosive";
             }
         }
 
@@ -93,24 +92,20 @@ public class PlayerInteractor : MonoBehaviour
         RaycastHit hit;
         if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, interactionDistance))
         {
-            // 1. Check for Weapon Pickup
             WeaponPickup weapon = hit.transform.GetComponent<WeaponPickup>();
             if (weapon != null) { weapon.Interact(); return; }
 
-            // 2. Check for Bomb Pickup
             BombItem bomb = hit.transform.GetComponent<BombItem>();
-            if (bomb != null) { bomb.Interact(); MissionManager.Instance.SetBombIcon(true); return; }
+            if (bomb != null) { hasBomb = true; bomb.Interact(); MissionManager.Instance.SetBombIcon(true); return; }
 
-            // 3. Check for Obstacle Interaction
             DestructibleObstacle obstacle = hit.transform.GetComponent<DestructibleObstacle>();
-            if (obstacle != null && hasBomb) { obstacle.PlantBomb(); hasBomb = false; return; }
+            if (obstacle != null && hasBomb) { obstacle.PlantBomb(); hasBomb = false; MissionManager.Instance.SetBombIcon(false); return; }
 
-            // 4. Check for Keycard or Door Interaction
             Keycard key = hit.transform.GetComponent<Keycard>();
             if (key != null) { key.Interact(); return; }
 
             DoorScript door = hit.transform.GetComponent<DoorScript>();
-            if (door != null) { door.InteractAttempt(); return; }
+            if (door != null) { door.InteractAttempt(this); return; } // Pass 'this' player to check keys
         }
     }
 }

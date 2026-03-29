@@ -1,67 +1,50 @@
 using UnityEngine;
 
 /// <summary>
-/// Attached to a door object. Handles locking, unlocking, and animation.
+/// A door that only opens if the player has a specific Key ID.
 /// </summary>
 public class DoorScript : MonoBehaviour
 {
-    [Header("Door Settings")]
-    // The keycard ID needed to open this door (must match Keycard.cs keycardID)
-    public string requiredKeycardID = "AirlockKey";
+    [Header("Security Settings")]
+    public int requiredKeyID; // The ID of the key needed for this door
     public bool isLocked = true;
 
-    [Header("Component References")]
-    // Drag the visual door model (the part that moves) here.
-    public Animator doorAnimator;
-
-    // Public property to track if the keycard has been collected
-    public static bool HasKeycard = false;
+    [Header("Animations")]
+    private Animator _doorAnim;
+    private bool isOpen = false;
 
     void Start()
     {
-        if (doorAnimator == null)
-        {
-            Debug.LogError("DoorScript requires an Animator reference on the door model.");
-        }
+        _doorAnim = GetComponentInParent<Animator>();
     }
 
-    /// <summary>
-    /// Attempts to open the door when the player is near and presses 'E'.
-    /// </summary>
-    public void InteractAttempt()
+    public void InteractAttempt(PlayerInteractor player)
     {
-        if (!isLocked)
+        // Check if the player has the matching ID
+        if (player.HasKey(requiredKeyID))
         {
-            // Door is already unlocked, so toggle open/close
-            ToggleDoor();
-        }
-        else if (isLocked && HasKeycard)
-        {
-            // Door is locked, but the player has the key!
-            UnlockAndOpen();
+            OpenDoor();
         }
         else
         {
-            // Door is locked and player lacks the key
-            Debug.Log("Door is locked. Requires " + requiredKeycardID + " Keycard.");
-            // TODO: Display an on-screen message to the player here
+            // Show the "Find the key" message via MissionManager
+            MissionManager.Instance.ShowLockedMessage("Access Denied. Find Keycard " + requiredKeyID);
+            Debug.Log("Door locked. Requires Key ID: " + requiredKeyID);
         }
     }
 
-    void ToggleDoor()
+    void OpenDoor()
     {
-        // Check current state and trigger the animation
-        bool isOpen = doorAnimator.GetBool("IsOpen");
-        doorAnimator.SetBool("IsOpen", !isOpen);
-    }
+        isOpen = !isOpen;
 
-    void UnlockAndOpen()
-    {
+        // Trigger the bool parameter on the parent's Animator
+        if (_doorAnim != null)
+        {
+            _doorAnim.SetBool("IsOpen", isOpen);
+        }
+
         isLocked = false;
-        ToggleDoor(); // Open the door
-        Debug.Log("Door Unlocked and Opened!");
-    }
 
-    // NOTE: For the Animator, create a boolean parameter named "IsOpen" 
-    // and use it to transition between the Closed and Open states.
+        MissionManager.Instance.UpdateObjective("Door Unlocked. Proceed with caution.");
+    }
 }
